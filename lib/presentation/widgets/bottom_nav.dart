@@ -19,21 +19,26 @@ class BottomNavBar extends StatelessWidget {
       unselectedItemColor: Colors.black54, // Màu xám cho icon chưa chọn
       showSelectedLabels: true, // Hiển thị nhãn khi chọn
       showUnselectedLabels: true, // Vẫn hiển thị nhãn khi không chọn
-      type: BottomNavigationBarType.fixed, // Đảm bảo 3 mục luôn cố định
+      type: BottomNavigationBarType.fixed,
       items: const [
         BottomNavigationBarItem(
-          icon: Icon(Icons.book_outlined), // Icon viền
-          activeIcon: Icon(Icons.book), // Icon đậm khi được chọn
+          icon: Icon(Icons.home_outlined),
+          activeIcon: Icon(Icons.home),
+          label: 'Trang chủ',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.book_outlined),
+          activeIcon: Icon(Icons.book),
           label: 'Thư viện',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.add_box_outlined), // Icon viền
-          activeIcon: Icon(Icons.add_box), // Icon đậm khi được chọn
+          icon: Icon(Icons.add_box_outlined),
+          activeIcon: Icon(Icons.add_box),
           label: 'Thêm mới',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline), // Icon viền
-          activeIcon: Icon(Icons.person), // Icon đậm khi được chọn
+          icon: Icon(Icons.person_outline),
+          activeIcon: Icon(Icons.person),
           label: 'Cá nhân',
         ),
       ],

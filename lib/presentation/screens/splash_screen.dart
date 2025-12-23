@@ -1,7 +1,6 @@
-
+import 'package:demo/presentation/screens/connection_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'home_screen.dart'; // Import HomeScreen
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -17,7 +16,7 @@ class _SplashScreenState extends State<SplashScreen> {
     Future.delayed(const Duration(seconds: 3), () {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()), // Navigate to HomeScreen
+        MaterialPageRoute(builder: (_) => const ConnectionScreen()),
       );
     });
   }

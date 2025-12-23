@@ -45,6 +45,11 @@ dependencies:
   flutter_tts: ^3.8.3
   network_info_plus: ^5.0.1
   permission_handler: ^11.3.0
+  flutter_bloc: ^8.1.5
+  web_socket_channel: ^2.4.0
+  path_provider: ^2.1.1
+  flutter_sound: ^9.2.13
+  audioplayers: ^5.2.1
 
 dev_dependencies:
   flutter_test:
