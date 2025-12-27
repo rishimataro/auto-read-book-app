@@ -20,14 +20,3 @@ class TtsReading extends TtsState {
 }
 
 class TtsPaused extends TtsState {}
-
-class TtsVoicesLoaded extends TtsState {
-  final List<Map<String, String>> voices;
-  final String? currentVoice;
-  
-  const TtsVoicesLoaded({required this.voices, this.currentVoice});
-  
-  @override
-  List<Object> get props => [voices, currentVoice ?? ''];
-}
-

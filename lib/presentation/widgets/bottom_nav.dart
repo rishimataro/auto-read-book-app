@@ -37,9 +37,9 @@ class BottomNavBar extends StatelessWidget {
           label: 'Thêm mới',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline),
+          icon: Icon(Icons.settings_outlined),
           activeIcon: Icon(Icons.person),
-          label: 'Cá nhân',
+          label: 'Cài đặt',
         ),
       ],
     );

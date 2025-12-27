@@ -12,7 +12,7 @@ class BookCubit extends Cubit<BookState> {
   final PiRepository _repository;
   final FlutterTts _tts = FlutterTts();
   StreamSubscription<String>? _textSubscription;
-  StreamSubscription<String>? _readingStreamSubscription; // Lưu subscription cho reading stream (đã transform thành String)
+  StreamSubscription<String>? _readingStreamSubscription;
 
   String _currentText = "";
 
@@ -159,6 +159,12 @@ class BookCubit extends Cubit<BookState> {
   // Hàm xử lý từng sự kiện từ Server
   void _handleStreamEvent(Map<String, dynamic> data) {
     final status = data['status'];
+    final sideRaw = data['side'];
+    final text = data['text'];
+
+    // Log chi tiết mọi event từ backend để debug
+    print("[BookCubit] Event nhận được - status: $status, side: $sideRaw, "
+        "text_len: ${text is String ? text.length : 'null'}, raw: $data");
 
     if (status == 'processing' || status == 'capturing' || status == 'flipping') {
       // Giữ lại text hiện tại khi đang loading

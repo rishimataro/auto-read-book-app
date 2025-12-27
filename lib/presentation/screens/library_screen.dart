@@ -80,11 +80,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
         .toList();
 
     if (mounted) {
-      setState(() {
-        _allBooks = allReadBooks.reversed.toList();
-        _filteredBooks = _allBooks;
-        _favoriteBooks = favoriteBooksList.reversed.toList();
-      });
+    setState(() {
+      _allBooks = allReadBooks.reversed.toList();
+      _filteredBooks = _allBooks;
+      _favoriteBooks = favoriteBooksList.reversed.toList();
+    });
     }
   }
 
@@ -260,7 +260,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             children: [
               const SizedBox(height: 16),
               if (!_isSelectionMode)
-                TextField(
+              TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Tìm kiếm sách...',
@@ -278,7 +278,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 _buildSectionTitle('Sách yêu thích'),
                 const SizedBox(height: 10),
                 _buildBooksList(_favoriteBooks, isFavoriteList: true),
-                const SizedBox(height: 24),
+              const SizedBox(height: 24),
               ],
               _buildSectionTitle('Tất cả sách'),
               const SizedBox(height: 10),
@@ -364,49 +364,49 @@ class _LibraryScreenState extends State<LibraryScreen> {
         }
       },
       child: Container(
-        margin: const EdgeInsets.only(right: 16),
-        child: Column(
+              margin: const EdgeInsets.only(right: 16),
+              child: Column(
           mainAxisSize: MainAxisSize.min, // Giảm kích thước tối thiểu
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: imagePath != null && imagePath.isNotEmpty
-                      ? Image.file(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: imagePath != null && imagePath.isNotEmpty
+                            ? Image.file(
                           File(imagePath),
                           width: isFavoriteList ? 130 : double.infinity,
                           height: isFavoriteList ? 170 : 180, // Giảm từ 200 xuống 180
                           fit: BoxFit.cover,
                         )
-                      : Container(
+                            : Container(
                           width: isFavoriteList ? 130 : double.infinity,
                           height: isFavoriteList ? 170 : 180, // Giảm từ 200 xuống 180
                           color: Colors.grey[300],
                           child: const Icon(Icons.book, size: 50, color: Colors.grey),
                         ),
-                ),
-                if (isSelected)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.check_circle, color: Colors.white, size: 40),
-                    ),
+                      if (isSelected)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.check_circle, color: Colors.white, size: 40),
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
             const SizedBox(height: 6), // Giảm từ 8 xuống 6
             Flexible(
               child: Text(
-                title,
+                    title,
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
             ),
             if (author.isNotEmpty)
               Flexible(
@@ -415,8 +415,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   style: const TextStyle(fontSize: 11, color: Colors.grey),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                ),
               ),
+            ),
           ],
         ),
       ),

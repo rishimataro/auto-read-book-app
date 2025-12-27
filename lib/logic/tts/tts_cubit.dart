@@ -8,8 +8,6 @@ part 'tts_state.dart';
 class TtsCubit extends Cubit<TtsState> {
   final FlutterTts _flutterTts = FlutterTts();
   bool _isReading = false;
-  List<Map<String, String>> _availableVoices = [];
-  String? _currentVoiceName;
   double _speechRate = 0.5;
   DateTime? _readingStartTime;
   String? _currentReadingText;
@@ -45,110 +43,21 @@ class TtsCubit extends Cubit<TtsState> {
   Future<void> _loadSettingsAndInitTts() async {
     final prefs = await SharedPreferences.getInstance();
     final language = prefs.getString('read_language') ?? 'vi-VN';
-    final savedVoice = prefs.getString('tts_voice_name');
     _speechRate = prefs.getDouble('speech_rate') ?? 0.5;
 
     await _flutterTts.setLanguage(language);
     await _flutterTts.setSpeechRate(_speechRate);
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
-
-    // Load available voices first
-    await loadAvailableVoices();
-    
-    // Set saved voice if available, otherwise use first available voice
-    if (savedVoice != null && savedVoice.isNotEmpty) {
-      // Check if saved voice still exists in available voices
-      final voiceExists = _availableVoices.any((v) => v['name'] == savedVoice);
-      if (voiceExists) {
-        await setVoice(savedVoice);
-      } else if (_availableVoices.isNotEmpty) {
-        // If saved voice doesn't exist, use first available voice
-        await setVoice(_availableVoices.first['name'] ?? '');
-      }
-    } else if (_availableVoices.isNotEmpty) {
-      // If no saved voice, use first available voice
-      await setVoice(_availableVoices.first['name'] ?? '');
-    }
   }
-
-  Future<void> loadAvailableVoices() async {
-    try {
-      final voices = await _flutterTts.getVoices;
-      if (voices != null) {
-        _availableVoices = List<Map<String, String>>.from(voices);
-        
-        // Filter voices by current language
-        final language = await _flutterTts.getLanguages ?? 'vi-VN';
-        final filteredVoices = _availableVoices.where((voice) {
-          final voiceLocale = voice['locale'] ?? '';
-          return voiceLocale.startsWith(language.split('-')[0]);
-        }).toList();
-        
-        if (filteredVoices.isNotEmpty) {
-          _availableVoices = filteredVoices;
-        }
-        
-        emit(TtsVoicesLoaded(voices: _availableVoices, currentVoice: _currentVoiceName));
-      }
-    } catch (e) {
-      print('Error loading voices: $e');
-      _availableVoices = [];
-    }
-  }
-
-  Future<void> setVoice(String voiceName) async {
-    try {
-      // Find voice by name
-      final voice = _availableVoices.firstWhere(
-        (v) => v['name'] == voiceName,
-        orElse: () => _availableVoices.isNotEmpty ? _availableVoices.first : {},
-      );
-      
-      if (voice.isNotEmpty) {
-        await _flutterTts.setVoice({
-          'name': voice['name'] ?? '',
-          'locale': voice['locale'] ?? '',
-        });
-        
-        _currentVoiceName = voiceName;
-        
-        // Save to preferences
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('tts_voice_name', voiceName);
-        
-        emit(TtsVoicesLoaded(voices: _availableVoices, currentVoice: _currentVoiceName));
-      }
-    } catch (e) {
-      print('Error setting voice: $e');
-      // If setting voice fails, try to use default voice
-      if (_availableVoices.isNotEmpty) {
-        final defaultVoice = _availableVoices.first;
-        try {
-          await _flutterTts.setVoice({
-            'name': defaultVoice['name'] ?? '',
-            'locale': defaultVoice['locale'] ?? '',
-          });
-          _currentVoiceName = defaultVoice['name'];
-        } catch (e2) {
-          print('Error setting default voice: $e2');
-        }
-      }
-    }
-  }
-
-  String? get currentVoiceName => _currentVoiceName;
-  List<Map<String, String>> get availableVoices => _availableVoices;
 
   Future<void> readText(String text, {Function()? onComplete}) async {
     if (text.isEmpty) return;
-
-    // Lưu callback hoàn thành cho cả chuỗi đọc hiện tại
+ 
     if (onComplete != null) {
       _onReadingComplete = onComplete;
     }
 
-    // Nếu đang đọc, thêm text mới vào queue để đọc nối tiếp
     if (_isReading) {
       _readingQueue.add(text);
       return;
@@ -158,23 +67,6 @@ class TtsCubit extends Cubit<TtsState> {
     _currentReadingText = text;
     _readingStartTime = DateTime.now();
     emit(TtsReading(text));
-    
-    // Ensure voice is set before reading
-    if (_currentVoiceName != null && _availableVoices.isNotEmpty) {
-      try {
-        final voice = _availableVoices.firstWhere(
-          (v) => v['name'] == _currentVoiceName,
-          orElse: () => _availableVoices.first,
-        );
-        await _flutterTts.setVoice({
-          'name': voice['name'] ?? '',
-          'locale': voice['locale'] ?? '',
-        });
-      } catch (e) {
-        print('Error setting voice before reading: $e');
-      }
-    }
-    
     await _flutterTts.speak(text);
   }
 
@@ -217,6 +109,27 @@ class TtsCubit extends Cubit<TtsState> {
     if (totalTime == 0) return 1.0;
     final elapsed = getElapsedReadingTime() ?? 0;
     return (elapsed / totalTime).clamp(0.0, 1.0);
+  }
+
+  /// Lấy text đang đọc hiện tại
+  String? getCurrentReadingText() {
+    return _currentReadingText;
+  }
+
+  /// Tính vị trí ký tự đã đọc được dựa trên thời gian đã trôi qua
+  /// Trả về số ký tự đã đọc được (ước tính)
+  int? getReadingPosition() {
+    if (_currentReadingText == null || _readingStartTime == null) return null;
+    
+    final totalTime = estimateReadingTime(_currentReadingText!);
+    if (totalTime == 0) return _currentReadingText!.length;
+    
+    final elapsed = getElapsedReadingTime() ?? 0;
+    final progress = (elapsed / totalTime).clamp(0.0, 1.0);
+    
+    // Tính số ký tự đã đọc dựa trên progress
+    final position = (progress * _currentReadingText!.length).round();
+    return position.clamp(0, _currentReadingText!.length);
   }
 
   void stopReading() {

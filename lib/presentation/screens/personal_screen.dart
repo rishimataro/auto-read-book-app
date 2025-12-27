@@ -27,7 +27,7 @@ class PersonalView extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
-          "Cá nhân & Cài đặt",
+          "Cài đặt",
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -53,31 +53,6 @@ class PersonalView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
       children: [
-        // User Info Section (static for now)
-        const Row(
-          children: [
-            CircleAvatar(
-              radius: 40,
-              backgroundImage: NetworkImage('https://via.placeholder.com/150'),
-            ),
-            SizedBox(width: 20),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Người dùng",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  "Cài đặt và tùy chọn",
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 30),
-        const Divider(),
         const Text(
           'Cài đặt đọc',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey),
@@ -119,12 +94,6 @@ class PersonalView extends StatelessWidget {
             );
           },
         ),
-        const Divider(),
-        const Text(
-          'Tài khoản',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey),
-        ),
-        _buildMenuItem(Icons.logout, "Đăng xuất", isLogout: true),
       ],
     );
   }
@@ -163,24 +132,6 @@ class PersonalView extends StatelessWidget {
             ],
           ),
         );
-      },
-    );
-  }
-
-  Widget _buildMenuItem(IconData icon, String title, {bool isLogout = false}) {
-    return ListTile(
-      leading: Icon(icon, color: isLogout ? Colors.red : Colors.black54),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w500,
-          color: isLogout ? Colors.red : Colors.black87,
-        ),
-      ),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-      onTap: () {
-        // Handle tap
       },
     );
   }

@@ -1,7 +1,7 @@
 import 'package:demo/logic/connection/connection_cubit.dart';
 import 'package:demo/logic/connection/connection_state.dart';
 import 'package:demo/logic/home/home_cubit.dart';
-import 'package:demo/presentation/screens/connection_screen.dart';
+import 'package:demo/presentation/screens/add_book_screen.dart';
 import 'package:demo/presentation/screens/read_book_screen.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -20,6 +20,19 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _loadHomeData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh khi quay lại tab Home để hiển thị sách vừa đọc
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadHomeData();
+    });
+  }
+
+  void _loadHomeData() {
     final isConnected =
         context.read<ConnectionCubit>().state is ConnectionEstablished;
     context.read<HomeCubit>().loadHomeData(isConnected);
@@ -29,25 +42,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Trang chủ'),
-        actions: [
-          BlocBuilder<ConnectionCubit, ConnectionState>(
-            builder: (context, state) {
-              final isConnected = state is ConnectionEstablished;
-              return Row(
-                children: [
-                  Text(isConnected ? 'Online' : 'Offline'),
-                  Icon(
-                    Icons.circle,
-                    color: isConnected ? Colors.green : Colors.red,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 16),
-                ],
-              );
-            },
-          )
-        ],
+        title: const Text('Trang chủ', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: BlocBuilder<HomeCubit, HomeState>(
         builder: (context, state) {
@@ -69,11 +64,6 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Tổng quan',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 20),
           if (state.lastReadBook != null) ...[
             const Text(
               'Sách đang đọc gần nhất',
@@ -112,37 +102,22 @@ class _HomePageState extends State<HomePage> {
             runSpacing: 10,
             children: [
               ElevatedButton.icon(
-                onPressed: state.lastReadBook != null
-                    ? () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ReadBookScreen(
-                              title: state.lastReadBook!['title'],
-                              author: state.lastReadBook!['author'],
-                            ),
-                          ),
-                        );
-                      }
-                    : null,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Bắt đầu đọc'),
+                onPressed: () {
+                  // Chuyển sang màn thêm sách mới
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AddBookScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Thêm mới sách'),
               ),
               ElevatedButton.icon(
                 onPressed: widget.onNavigateToLibrary,
                 icon: const Icon(Icons.library_books),
                 label: const Text('Thư viện'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const ConnectionScreen()),
-                  );
-                },
-                icon: const Icon(Icons.wifi),
-                label: const Text('Kết nối Pi'),
               ),
             ],
           )

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:demo/data/models/reading_history.dart';
 import 'package:demo/data/repositories/pi_repository.dart';
 import 'package:demo/data/repositories/reading_history_repository.dart';
@@ -51,21 +52,30 @@ class _ReadBookPageState extends State<ReadBookPage> {
   bool _autoRead = true;
   bool _isPlaying = false;
   String _lastReadText = "";
-  late String _streamUrl; // Calculate once
+  String _streamUrl = ""; // Initialize with empty string
   final ReadingHistoryRepository _historyRepository = ReadingHistoryRepository();
   StreamSubscription? _readingStream;
   String _currentPageText = "";
   int _currentPage = 0;
-  bool _isChangingVoice = false;
   Timer? _readingTimer;
   bool _isContinuousReading = false;
   DateTime? _currentPageStartTime;
   double? _estimatedPageReadingTime;
 
+  // Quản lý một lần đọc (session)
+  String _sessionText = "";
+  bool _sessionActive = false;
+  bool _sessionSaved = false;
+
+  // Quản lý vị trí dừng trong đoạn đang đọc
+  String? _pausedText; // Text đang đọc khi bị dừng
+  int? _pausedPosition; // Vị trí ký tự đã đọc được khi bị dừng
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _saveLastReadBook(); // Lưu sách vừa đọc khi mở màn hình
 
     _initCameraStream();
     
@@ -73,6 +83,42 @@ class _ReadBookPageState extends State<ReadBookPage> {
     _lastReadText = "";
     _currentPageText = "";
     _currentPage = 0;
+  }
+
+  /// Lưu thông tin sách vừa đọc vào SharedPreferences
+  Future<void> _saveLastReadBook() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastReadBook = {
+        'title': widget.title,
+        'author': widget.author,
+      };
+      
+      // Load đầy đủ thông tin sách từ SharedPreferences
+      final booksJson = prefs.getStringList('read_books') ?? [];
+      Map<String, dynamic>? fullBookData;
+      
+      for (var bookString in booksJson) {
+        try {
+          final book = json.decode(bookString) as Map<String, dynamic>;
+          if (book['title'] == widget.title && book['author'] == widget.author) {
+            fullBookData = book;
+            break;
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+      
+      // Lưu sách vừa đọc (dùng dữ liệu đầy đủ nếu có)
+      if (fullBookData != null) {
+        await prefs.setString('last_read_book', json.encode(fullBookData));
+      } else {
+        await prefs.setString('last_read_book', json.encode(lastReadBook));
+      }
+    } catch (e) {
+      print('Error saving last read book: $e');
+    }
   }
 
   Future<void> _initCameraStream() async {
@@ -98,6 +144,7 @@ class _ReadBookPageState extends State<ReadBookPage> {
 
   @override
   void dispose() {
+    // Dừng stream và timer khi dispose widget
     _readingStream?.cancel();
     _readingTimer?.cancel();
     super.dispose();
@@ -114,55 +161,117 @@ class _ReadBookPageState extends State<ReadBookPage> {
   }
 
   void _handleBookStateChange(BuildContext context, BookState state) {
-    if (state is BookLoaded && _autoRead && _isPlaying && !_isChangingVoice) {
+    if (state is BookLoaded && _autoRead && _isPlaying) {
       final newText = state.text;
       _currentPageText = newText;
 
-      if (newText.isNotEmpty && newText != _lastReadText) {
-        String textToRead = "";
+      // Nếu đây là lần đầu nhận text trong phiên, đánh dấu bắt đầu session
+      if (!_sessionActive && newText.isNotEmpty) {
+        _sessionActive = true;
+        _sessionSaved = false;
+        _sessionText = "";
+        _currentPage = 0;
+      }
 
+      if (newText.isNotEmpty && newText != _lastReadText) {
+        // Lấy CHÍNH XÁC phần text mới được append thêm so với lần trước
+        String textToRead = "";
         if (_lastReadText.isEmpty) {
+          // Lần đầu tiên: đọc toàn bộ
           textToRead = newText;
         } else if (newText.length > _lastReadText.length) {
-          final lastMarker = _lastReadText.lastIndexOf("---");
-          if (lastMarker != -1) {
-            final afterLastMarker = _lastReadText.substring(lastMarker);
-            final newMarker = newText.lastIndexOf("---");
-            if (newMarker != -1 && newMarker > lastMarker) {
-              final afterNewMarker = newText.substring(newMarker);
-              final lines = afterNewMarker.split('\n');
-              if (lines.length > 1) {
-                textToRead = lines.sublist(1).join('\n').trim();
-              }
-            }
-          }
-          
-          if (textToRead.isEmpty) {
-            final diff = newText.length - _lastReadText.length;
-            if (diff > 0) {
-              textToRead = newText.substring(_lastReadText.length).trim();
-            }
-          }
+          // Những lần sau: chỉ đọc phần được thêm mới
+          textToRead = newText.substring(_lastReadText.length).trim();
         }
+
+        print("[ReadBookPage] newTextLen=${newText.length}, "
+            "lastReadTextLen=${_lastReadText.length}, "
+            "textToReadLen=${textToRead.length}");
 
         if (textToRead.isNotEmpty) {
           _lastReadText = newText;
-          
-          _saveReadingHistory(textToRead);
-          
+
+          // Gộp text vào session thay vì lưu từng trang
+          if (_sessionActive) {
+            if (_sessionText.isEmpty) {
+              _sessionText = textToRead;
+            } else {
+              _sessionText = '$_sessionText\n\n$textToRead';
+            }
+          }
+
           final ttsCubit = context.read<TtsCubit>();
           _estimatedPageReadingTime = ttsCubit.estimateReadingTime(textToRead);
           _currentPageStartTime = DateTime.now();
-          
+
           ttsCubit.readText(textToRead, onComplete: () {
             _onPageReadingComplete(context);
           });
-          
+
           _startReadingTimer(context);
         } else {
           print("Warning: textToRead rỗng, không đọc");
         }
       }
+    }
+
+    // Nếu backend báo đã đọc xong, lưu toàn bộ nội dung của phiên đọc
+    if (state is BookLoaded) {
+      final msg = state.statusMessage ?? '';
+      if (_sessionActive && !_sessionSaved && msg.contains('Đã đọc xong')) {
+        _finalizeReadingSession();
+      }
+    }
+  }
+
+  Future<void> _finalizeReadingSession() async {
+    if (!_sessionActive || _sessionSaved) return;
+    final text = _sessionText.trim();
+    if (text.isEmpty) return;
+
+    try {
+      await _saveReadingHistory(text);
+      _sessionSaved = true;
+      _sessionActive = false;
+      print("[ReadBookPage] Đã lưu lịch sử đọc cho 1 lần đọc, length=${text.length}");
+    } catch (e) {
+      print("[ReadBookPage] Lỗi khi lưu lịch sử phiên đọc: $e");
+    }
+  }
+
+  /// Dừng hoàn toàn việc đọc sách: TTS, backend, stream, timer và lưu lịch sử
+  Future<void> _finishReading(BuildContext context) async {
+    print("[ReadBookPage] Bắt đầu dừng đọc sách và lưu lịch sử...");
+    
+    // 1. Dừng TTS ngay lập tức
+    final ttsCubit = context.read<TtsCubit>();
+    ttsCubit.stopReading();
+    print("[ReadBookPage] Đã dừng TTS");
+    
+    // 2. Dừng backend (chụp ảnh và xử lý)
+    final bookCubit = context.read<BookCubit>();
+    await bookCubit.stopReading();
+    print("[ReadBookPage] Đã dừng backend");
+    
+    // 3. Hủy timer nếu có
+    _readingTimer?.cancel();
+    _readingTimer = null;
+    print("[ReadBookPage] Đã hủy timer");
+    
+    // 4. Reset các flags để không chạy ngầm nữa
+    setState(() {
+      _isPlaying = false;
+      _isContinuousReading = false;
+    });
+    print("[ReadBookPage] Đã reset flags");
+    
+    // 5. Lưu lịch sử đọc (nếu chưa lưu)
+    await _finalizeReadingSession();
+    print("[ReadBookPage] Đã lưu lịch sử");
+    
+    // 6. Pop về màn hình trước
+    if (mounted) {
+      Navigator.pop(context, true);
     }
   }
 
@@ -234,14 +343,34 @@ class _ReadBookPageState extends State<ReadBookPage> {
               icon: const Icon(Icons.edit, color: Colors.white),
               tooltip: 'Chỉnh sửa thông tin sách',
               onPressed: () async {
+                // Load đầy đủ thông tin sách từ SharedPreferences
+                final prefs = await SharedPreferences.getInstance();
+                final booksJson = prefs.getStringList('read_books') ?? [];
+                Map<String, dynamic>? fullBookData;
+                
+                for (var bookString in booksJson) {
+                  try {
+                    final book = json.decode(bookString) as Map<String, dynamic>;
+                    if (book['title'] == widget.title && book['author'] == widget.author) {
+                      fullBookData = book;
+                      break;
+                    }
+                  } catch (e) {
+                    // Ignore errors
+                  }
+                }
+                
+                // Nếu không tìm thấy, dùng dữ liệu cơ bản
+                final bookToEdit = fullBookData ?? {
+                  'title': widget.title,
+                  'author': widget.author,
+                };
+                
                 final result = await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => AddBookScreen(
-                      bookToEdit: {
-                        'title': widget.title,
-                        'author': widget.author,
-                      },
+                      bookToEdit: bookToEdit,
                     ),
                   ),
                 );
@@ -266,9 +395,21 @@ class _ReadBookPageState extends State<ReadBookPage> {
             IconButton(
               icon: const Icon(Icons.stop_circle_outlined, color: Colors.redAccent),
               tooltip: 'Dừng đọc',
-              onPressed: () {
-                context.read<BookCubit>().stopReading();
-                context.read<TtsCubit>().stopReading();
+              onPressed: () async {
+                final ttsCubit = context.read<TtsCubit>();
+                final bookCubit = context.read<BookCubit>();
+
+                // Lưu lại text đang đọc và vị trí đã đọc được để có thể resume
+                _pausedText = ttsCubit.getCurrentReadingText();
+                _pausedPosition = ttsCubit.getReadingPosition();
+
+                // Dừng backend + TTS
+                await bookCubit.stopReading();
+                ttsCubit.stopReading();
+
+                // Lưu toàn bộ nội dung đã đọc trong phiên (nếu chưa lưu)
+                await _finalizeReadingSession();
+
                 setState(() {
                   _isPlaying = false;
                   _isContinuousReading = false;
@@ -486,44 +627,94 @@ class _ReadBookPageState extends State<ReadBookPage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               IconButton(
-                onPressed: () => _showVoiceSelectionDialog(context),
-                icon: const Icon(Icons.record_voice_over, size: 30),
-                tooltip: 'Đổi giọng đọc',
-              ),
-              IconButton(
                 onPressed: () async {
                   if (!_isPlaying) {
-                    // Bắt đầu đọc
+                    // Resume/Bắt đầu đọc
                     setState(() {
                       _isPlaying = true;
                     });
                     final bookState = context.read<BookCubit>().state;
-                    if (bookState is BookLoaded && bookState.text.isNotEmpty) {
-                      // Tiếp tục đọc từ vị trí hiện tại
-                      final parts = bookState.text.split('---');
-                      String textToRead = parts.length > 1 ? parts.last.trim() : bookState.text;
+                    final ttsCubit = context.read<TtsCubit>();
+
+                    // Kiểm tra xem có text đã dừng trước đó không
+                    if (_pausedText != null && _pausedText!.isNotEmpty && _pausedPosition != null) {
+                      // Resume từ vị trí đã dừng
+                      String textToRead = _pausedText!;
+                      int resumePosition = _pausedPosition!.clamp(0, textToRead.length);
+
+                      // Tìm vị trí bắt đầu từ từ tiếp theo (tránh cắt giữa từ)
+                      if (resumePosition < textToRead.length) {
+                        // Tìm đến khoảng trắng hoặc dấu câu tiếp theo
+                        int searchStart = resumePosition;
+                        while (searchStart < textToRead.length && 
+                               !RegExp(r'[\s.,;:!?]').hasMatch(textToRead[searchStart])) {
+                          searchStart++;
+                        }
+                        // Nếu tìm thấy khoảng trắng/dấu câu, bắt đầu từ sau đó
+                        if (searchStart < textToRead.length) {
+                          resumePosition = searchStart + 1;
+                        }
+                        // Nếu không tìm thấy, giữ nguyên vị trí
+                      }
+
+                      // Cắt phần đã đọc và lấy phần còn lại
+                      if (resumePosition < textToRead.length) {
+                        textToRead = textToRead.substring(resumePosition).trim();
+                      } else {
+                        // Đã đọc hết text này, xóa thông tin pause
+                        _pausedText = null;
+                        _pausedPosition = null;
+                        textToRead = "";
+                      }
+
                       if (textToRead.isNotEmpty) {
-                        context.read<TtsCubit>().readText(textToRead, onComplete: () {
+                        // Đọc phần còn lại
+                        _pausedText = null;
+                        _pausedPosition = null;
+                        ttsCubit.readText(textToRead, onComplete: () {
                           _onPageReadingComplete(context);
                         });
+                      } else {
+                        // Không còn gì để đọc, bắt đầu luồng mới
+                        _pausedText = null;
+                        _pausedPosition = null;
+                        setState(() {
+                          _isContinuousReading = true;
+                        });
+                        await context.read<BookCubit>().startContinuousReading();
                       }
-                    } else {
-                      // Bắt đầu quy trình đọc sách mới
+                    } else if (bookState is BookLoaded && bookState.text.isNotEmpty) {
+                      // Không có text đã dừng, nhưng có text trong state: đọc từ đầu
                       setState(() {
                         _isContinuousReading = true;
                       });
-                      context.read<BookCubit>().startContinuousReading();
+                      await context.read<BookCubit>().startContinuousReading();
+                    } else {
+                      // Bắt đầu quy trình đọc sách mới (đọc liên tục)
+                      setState(() {
+                        _isContinuousReading = true;
+                      });
+                      await context.read<BookCubit>().startContinuousReading();
                     }
                   } else {
-                    // Dừng đọc
+                    // Dừng đọc hoàn toàn: TTS + backend + timer
                     setState(() {
                       _isPlaying = false;
                       _isContinuousReading = false;
                     });
                     _readingTimer?.cancel();
-                    context.read<TtsCubit>().stopReading();
-                    // Không dừng backend để có thể tiếp tục sau
-                    // context.read<BookCubit>().stopReading();
+
+                    final ttsCubit = context.read<TtsCubit>();
+                    final bookCubit = context.read<BookCubit>();
+
+                    // Lưu lại text đang đọc và vị trí đã đọc được để có thể resume
+                    _pausedText = ttsCubit.getCurrentReadingText();
+                    _pausedPosition = ttsCubit.getReadingPosition();
+
+                    // Dừng đọc TTS ngay lập tức
+                    ttsCubit.stopReading();
+                    // Dừng lấy ảnh & xử lý chữ ở backend để tránh quá tải
+                    await bookCubit.stopReading();
                   }
                 },
                 icon: Icon(
@@ -541,7 +732,10 @@ class _ReadBookPageState extends State<ReadBookPage> {
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () async {
+              // Khi người dùng bấm "Đã đọc xong", dừng hoàn toàn và lưu lịch sử
+              await _finishReading(context);
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF9C7350),
               foregroundColor: Colors.white,
@@ -555,126 +749,4 @@ class _ReadBookPageState extends State<ReadBookPage> {
     );
   }
 
-  Future<void> _showVoiceSelectionDialog(BuildContext context) async {
-    final ttsCubit = context.read<TtsCubit>();
-    final bookCubit = context.read<BookCubit>();
-    
-    // Dừng đọc trước khi đổi giọng
-    setState(() {
-      _isChangingVoice = true;
-    });
-    
-    // Dừng TTS và backend processing
-    ttsCubit.stopReading();
-    
-    // Đợi một chút để đảm bảo TTS đã dừng hoàn toàn
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    // Tạm dừng backend (không dừng hoàn toàn để có thể tiếp tục)
-    // await bookCubit.stopReading(); // Comment out để không dừng backend
-    
-    await ttsCubit.loadAvailableVoices();
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return BlocBuilder<TtsCubit, TtsState>(
-          bloc: ttsCubit,
-          builder: (context, state) {
-            List<Map<String, String>> voices = [];
-            String? currentVoice;
-            if (state is TtsVoicesLoaded) {
-              voices = state.voices;
-              currentVoice = state.currentVoice;
-            } else {
-              voices = ttsCubit.availableVoices;
-              currentVoice = ttsCubit.currentVoiceName;
-            }
-            return AlertDialog(
-              title: const Text('Chọn giọng đọc', style: TextStyle(fontWeight: FontWeight.bold)),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 400),
-                child: SizedBox(
-                  width: double.maxFinite,
-                  child: voices.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
-                      : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: voices.length,
-                    itemBuilder: (context, index) {
-                      final voice = voices[index];
-                      final voiceName = voice['name'] ?? 'Unknown';
-                      final isSelected = voiceName == currentVoice;
-                      return RadioListTile<String>(
-                        title: Text(voiceName, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                        value: voiceName,
-                        groupValue: currentVoice,
-                        activeColor: const Color(0xFF426A80),
-                        onChanged: (value) async {
-                          if (value != null) {
-                            await ttsCubit.setVoice(value);
-                            Navigator.of(dialogContext).pop();
-                            
-                            // Đợi một chút để đảm bảo voice đã được set
-                            await Future.delayed(const Duration(milliseconds: 200));
-                            
-                            // Tiếp tục đọc sau khi đổi giọng
-                            setState(() {
-                              _isChangingVoice = false;
-                            });
-                            
-                            // Lấy text hiện tại và đọc lại
-                            final bookState = context.read<BookCubit>().state;
-                            if (_isPlaying && bookState is BookLoaded && bookState.text.isNotEmpty) {
-                              // Lấy phần text mới nhất để đọc lại
-                              final parts = bookState.text.split('---');
-                              String textToRead = '';
-                              if (parts.length > 1) {
-                                textToRead = parts.last.trim();
-                              } else {
-                                textToRead = bookState.text;
-                              }
-                              
-                              if (textToRead.isNotEmpty) {
-                                _currentPageText = textToRead;
-                                ttsCubit.readText(textToRead, onComplete: () {
-                                  _onPageReadingComplete(context);
-                                });
-                              }
-                            }
-                          }
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                    setState(() {
-                      _isChangingVoice = false;
-                    });
-                    if (_isPlaying) {
-                      final bookState = context.read<BookCubit>().state;
-                      if (bookState is BookLoaded && bookState.text.isNotEmpty) {
-                        final parts = bookState.text.split('---');
-                        String textToRead = parts.length > 1 ? parts.last.trim() : bookState.text;
-                        if (textToRead.isNotEmpty) {
-                          ttsCubit.readText(textToRead);
-                        }
-                      }
-                    }
-                  },
-                  child: const Text('Đóng'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 }

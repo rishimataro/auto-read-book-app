@@ -15,8 +15,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Voice Book',
       theme: ThemeData(
-        textTheme: GoogleFonts.josefinSansTextTheme(),
-      ),
+        textTheme: GoogleFonts.interTextTheme(),
+    ),
       home: const SplashScreen(),
     );
   }

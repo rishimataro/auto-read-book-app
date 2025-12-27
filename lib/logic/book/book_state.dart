@@ -1,20 +1,40 @@
 import 'package:equatable/equatable.dart';
 
 abstract class BookState extends Equatable {
-  @override
-  List<Object> get props => [];
+  const BookState();
 }
-class BookInitial extends BookState {}
+
+class BookInitial extends BookState {
+  const BookInitial();
+
+  @override
+  List<Object?> get props => const [];
+}
+
 class BookLoading extends BookState {
   final String message;
-  BookLoading(this.message);
+
+  const BookLoading(this.message);
+
+  @override
+  List<Object?> get props => [message];
 }
+
 class BookLoaded extends BookState {
   final String text;
   final String? statusMessage;
-  BookLoaded(this.text, {this.statusMessage});
+
+  const BookLoaded(this.text, {this.statusMessage});
+
+  @override
+  List<Object?> get props => [text, statusMessage];
 }
+
 class BookError extends BookState {
   final String message;
-  BookError(this.message);
+
+  const BookError(this.message);
+
+  @override
+  List<Object?> get props => [message];
 }
